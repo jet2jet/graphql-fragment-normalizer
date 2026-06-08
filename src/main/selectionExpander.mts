@@ -130,6 +130,20 @@ function expandSelection(
       );
 
       if (!canFlattenTypeCondition(typeRelations, parentType, fragmentType)) {
+        if (options.distributeAbstractFragments && isAbstractType(fragmentType)) {
+          return distributeAbstractFragment(
+            schema,
+            fragments,
+            selection.selectionSet,
+            scope,
+            fragmentType,
+            selection.loc,
+            selection.directives,
+            fragmentStack,
+            options
+          );
+        }
+
         if (!options.preserveNarrowingFragments) {
           return [];
         }
@@ -197,6 +211,20 @@ function expandSelection(
       );
 
       if (!canFlattenTypeCondition(typeRelations, parentType, fragmentType)) {
+        if (options.distributeAbstractFragments && isAbstractType(fragmentType)) {
+          return distributeAbstractFragment(
+            schema,
+            fragments,
+            fragment.selectionSet,
+            scope,
+            fragmentType,
+            selection.loc,
+            selection.directives,
+            [...fragmentStack, fragmentName],
+            options
+          );
+        }
+
         if (!options.preserveNarrowingFragments) {
           return [];
         }
@@ -238,6 +266,59 @@ function expandSelection(
 
 function throwUnexpectedSelection(selection: never): never {
   throw new Error(`Unexpected selection kind: ${JSON.stringify(selection)}`);
+}
+
+function distributeAbstractFragment(
+  schema: GraphQLSchema,
+  fragments: ReadonlyMap<string, FragmentDefinitionNode>,
+  selectionSet: SelectionSetNode,
+  scope: TypeScope,
+  fragmentType: GraphQLCompositeType,
+  loc: InlineFragmentNode['loc'],
+  directives: InlineFragmentNode['directives'],
+  fragmentStack: readonly string[],
+  options: ResolvedExpandFragmentsOptions
+): readonly SelectionNode[] {
+  const selections: SelectionNode[] = [];
+
+  // First apply the abstract condition to the current scope, then re-expand the
+  // fragment body once per reachable object so nested type conditions can flatten.
+  for (const objectType of getReachableObjectTypes(
+    schema,
+    narrowTypeScope(schema, options.typeRelationContext, scope, fragmentType)
+  )) {
+    const expandedSelectionSet = expandSelectionSetInScope(
+      schema,
+      fragments,
+      selectionSet,
+      {
+        parentType: objectType,
+        possibleTypeNames: new Set([objectType.name]),
+      },
+      fragmentStack,
+      options
+    );
+
+    if (expandedSelectionSet.selections.length === 0) {
+      continue;
+    }
+
+    selections.push({
+      kind: Kind.INLINE_FRAGMENT,
+      loc,
+      typeCondition: {
+        kind: Kind.NAMED_TYPE,
+        name: {
+          kind: Kind.NAME,
+          value: objectType.name,
+        },
+      },
+      directives,
+      selectionSet: expandedSelectionSet,
+    });
+  }
+
+  return selections;
 }
 
 function mergeSelections(
@@ -459,6 +540,22 @@ function intersectTypeNames(
   }
 
   return intersection;
+}
+
+function getReachableObjectTypes(
+  schema: GraphQLSchema,
+  scope: TypeScope
+): readonly GraphQLObjectType[] {
+  const objectTypes: GraphQLObjectType[] = [];
+
+  for (const typeName of scope.possibleTypeNames) {
+    const type = schema.getType(typeName);
+    if (isObjectType(type)) {
+      objectTypes.push(type);
+    }
+  }
+
+  return objectTypes;
 }
 
 function canFlattenTypeCondition(

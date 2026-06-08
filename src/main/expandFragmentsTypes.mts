@@ -23,6 +23,14 @@ export interface ExpandFragmentsOptions {
    */
   readonly preserveNarrowingFragments?: boolean;
   /**
+   * Emits abstract narrowing fragments as inline fragments for each reachable concrete object type.
+   *
+   * When true, a spread such as `...NodeFields` on a union can become
+   * `... on Owner { ... }` and `... on Admin { ... }` instead of keeping
+   * `... on Node { ... }`.
+   */
+  readonly distributeAbstractFragments?: boolean;
+  /**
    * Keeps named fragment spreads when the fragment is used at least this many times.
    *
    * Values less than or equal to `0` disable this behavior, so named fragments are always
@@ -53,6 +61,7 @@ export interface ResolvedExpandFragmentsOptions {
   readonly additionalFragments: readonly FragmentDefinitionNode[];
   readonly fragmentDefinitionsMode: FragmentDefinitionsMode;
   readonly operationName: string | null;
+  readonly distributeAbstractFragments: boolean;
   readonly preserveNamedFragmentsUsedAtLeast: number;
   readonly preserveNarrowingFragments: boolean;
   readonly preservedFragmentNames: ReadonlySet<string>;

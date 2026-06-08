@@ -182,6 +182,7 @@ function resolveOptions(
 
   return {
     additionalFragments,
+    distributeAbstractFragments: options.distributeAbstractFragments ?? false,
     fragmentDefinitionsMode,
     operationName,
     preserveNamedFragmentsUsedAtLeast,
@@ -212,6 +213,7 @@ function resolveFragmentOptions(
 
   return {
     additionalFragments,
+    distributeAbstractFragments: options.distributeAbstractFragments ?? false,
     fragmentDefinitionsMode: options.fragmentDefinitionsMode ?? 'drop',
     operationName: options.operationName ?? null,
     preserveNamedFragmentsUsedAtLeast,

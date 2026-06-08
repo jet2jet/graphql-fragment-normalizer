@@ -124,6 +124,7 @@ export interface ExpandFragmentsOptions {
   readonly additionalFragments?: readonly FragmentDefinitionNode[];
   readonly operationName?: string | null | undefined;
   readonly preserveNarrowingFragments?: boolean;
+  readonly distributeAbstractFragments?: boolean;
   readonly preserveNamedFragmentsUsedAtLeast?: number;
   readonly fragmentDefinitionsMode?: 'drop' | 'normalize' | 'preserve';
   readonly typeRelationContext?: TypeRelationContext;
@@ -133,6 +134,7 @@ export interface ExpandFragmentsOptions {
 - `additionalFragments`: Fragment definitions supplied outside the document being expanded.
 - `operationName`: Expands only the named operation. When omitted, all operations are expanded.
 - `preserveNarrowingFragments`: Keeps fragments that narrow from the current type to a more specific type as inline fragments. Defaults to `true`.
+- `distributeAbstractFragments`: Emits abstract narrowing fragments as inline fragments for each reachable concrete object type. Defaults to `false`.
 - `preserveNamedFragmentsUsedAtLeast`: Keeps named fragment spreads when a fragment is used at least this many times. Values less than or equal to `0` disable this behavior.
 - `fragmentDefinitionsMode`: Controls input `FragmentDefinition` nodes in the returned document. `drop` removes them after expansion, `preserve` keeps them unchanged, and `normalize` keeps and normalizes them. Defaults to `drop`.
 - `typeRelationContext`: Reusable type-relation cache created with `createTypeRelationContext(schema)`.
