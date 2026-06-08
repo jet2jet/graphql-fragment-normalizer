@@ -1,6 +1,6 @@
 {
   "name": "graphql-fragment-normalizer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Schema-aware GraphQL fragment expansion and normalization for ASTs and GraphQL Code Generator.",
   "keywords": [
     "graphql",
