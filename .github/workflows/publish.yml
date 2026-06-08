@@ -12,6 +12,8 @@ concurrency:
 jobs:
   get-vars:
     uses: ./.github/workflows/nodevars.yml
+    permissions:
+      contents: read
 
   build:
     name: Build package
@@ -62,7 +64,6 @@ jobs:
       - build
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       id-token: write # for npm publish --provenance
     environment:
       name: Publish
