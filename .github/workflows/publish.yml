@@ -89,4 +89,4 @@ jobs:
           name: npm-package
           path: package
       - name: Publish
-        run: npm publish package/*.tgz --provenance --ignore-scripts
+        run: npm publish ./package/*.tgz --provenance --ignore-scripts
