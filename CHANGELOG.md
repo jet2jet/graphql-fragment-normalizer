@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.2
+
+(Fix around CI only; no implementations changed)
+
 ## v0.2.1
 
 (Fix around CI only; no implementations changed)
