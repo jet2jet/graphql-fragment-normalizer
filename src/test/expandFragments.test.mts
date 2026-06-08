@@ -113,6 +113,112 @@ void describe('expandFragments', () => {
     );
   });
 
+  void it('uses schema type information to expand only matching fragments for union', () => {
+    const schema = buildSchema(`
+      interface Node {
+        id: ID!
+      }
+
+      interface User implements Node {
+        id: ID!
+        name: String!
+        address: String
+      }
+
+      type Owner implements Node & User {
+        id: ID!
+        name: String!
+        address: String
+        fromDate: String!
+      }
+
+      type Admin implements Node & User {
+        id: ID!
+        name: String!
+        address: String
+        adminOnly: String
+      }
+
+      union Maintainer = Owner | Admin
+
+      type Group implements Node {
+        id: ID!
+        name: String!
+        groupId: ID!
+        users: [User!]!
+        maintainers: [Maintainer!]!
+      }
+
+      type Query {
+        group: Group
+      }
+    `);
+    const document = parse(`
+      query GetGroup {
+        group {
+          users {
+            ...NodeFields
+          }
+          maintainers {
+            ...NodeFields
+          }
+        }
+      }
+
+      fragment NodeFields on Node {
+        id
+        ... on User {
+          name
+        }
+        ... on Group {
+          groupId
+        }
+        ... on Owner {
+          fromDate
+        }
+        ... on Admin {
+          adminOnly
+        }
+      }
+    `);
+
+    const result = expandFragments(schema, document);
+
+    assertPrintedEqual(
+      result,
+      parse(`
+        query GetGroup {
+          group {
+            users {
+              id
+              name
+              ... on Owner {
+                fromDate
+              }
+              ... on Admin {
+                adminOnly
+              }
+            }
+            maintainers {
+              ... on Node {
+                id
+                ... on User {
+                  name
+                }
+                ... on Owner {
+                  fromDate
+                }
+                ... on Admin {
+                  adminOnly
+                }
+              }
+            }
+          }
+        }
+      `)
+    );
+  });
+
   void it('preserves directives, aliases, and arguments', () => {
     const schema = buildSchema(`
       type Query {

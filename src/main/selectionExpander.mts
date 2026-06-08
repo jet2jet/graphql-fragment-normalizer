@@ -1,5 +1,6 @@
 import {
   getNamedType,
+  isAbstractType,
   isCompositeType,
   isInterfaceType,
   isObjectType,
@@ -20,6 +21,13 @@ import type { ResolvedExpandFragmentsOptions } from './expandFragmentsTypes.mts'
 
 type GraphQLFields = ReturnType<GraphQLObjectType['getFields']>;
 
+interface TypeScope {
+  readonly parentType: GraphQLCompositeType;
+  // Tracks the concrete runtime types still reachable through nested abstract fragments.
+  // This lets union selections drop impossible branches even after narrowing into an interface.
+  readonly possibleTypeNames: ReadonlySet<string>;
+}
+
 export function expandSelectionSet(
   schema: GraphQLSchema,
   fragments: ReadonlyMap<string, FragmentDefinitionNode>,
@@ -28,12 +36,30 @@ export function expandSelectionSet(
   fragmentStack: readonly string[],
   options: ResolvedExpandFragmentsOptions
 ): SelectionSetNode {
+  return expandSelectionSetInScope(
+    schema,
+    fragments,
+    selectionSet,
+    createTypeScope(schema, parentType),
+    fragmentStack,
+    options
+  );
+}
+
+function expandSelectionSetInScope(
+  schema: GraphQLSchema,
+  fragments: ReadonlyMap<string, FragmentDefinitionNode>,
+  selectionSet: SelectionSetNode,
+  scope: TypeScope,
+  fragmentStack: readonly string[],
+  options: ResolvedExpandFragmentsOptions
+): SelectionSetNode {
   const expandedSelections = selectionSet.selections.flatMap((selection) =>
     expandSelection(
       schema,
       fragments,
       selection,
-      parentType,
+      scope,
       fragmentStack,
       options
     )
@@ -51,11 +77,12 @@ function expandSelection(
   schema: GraphQLSchema,
   fragments: ReadonlyMap<string, FragmentDefinitionNode>,
   selection: SelectionNode,
-  parentType: GraphQLCompositeType,
+  scope: TypeScope,
   fragmentStack: readonly string[],
   options: ResolvedExpandFragmentsOptions
 ): readonly SelectionNode[] {
   const typeRelations = options.typeRelationContext;
+  const { parentType } = scope;
   switch (selection.kind) {
     case Kind.FIELD: {
       if (!selection.selectionSet) {
@@ -90,10 +117,17 @@ function expandSelection(
       if (
         !fragmentType ||
         !isCompositeType(fragmentType) ||
-        !typeRelations.doesOverlap(parentType, fragmentType)
+        !doesScopeOverlapType(schema, scope, fragmentType)
       ) {
         return [];
       }
+
+      const narrowedScope = narrowTypeScope(
+        schema,
+        typeRelations,
+        scope,
+        fragmentType
+      );
 
       if (!canFlattenTypeCondition(typeRelations, parentType, fragmentType)) {
         if (!options.preserveNarrowingFragments) {
@@ -105,11 +139,11 @@ function expandSelection(
         return [
           {
             ...selection,
-            selectionSet: expandSelectionSet(
+            selectionSet: expandSelectionSetInScope(
               schema,
               fragments,
               selection.selectionSet,
-              narrowParentType(typeRelations, parentType, fragmentType),
+              narrowedScope,
               fragmentStack,
               options
             ),
@@ -117,11 +151,11 @@ function expandSelection(
         ];
       }
 
-      return expandSelectionSet(
+      return expandSelectionSetInScope(
         schema,
         fragments,
         selection.selectionSet,
-        narrowParentType(typeRelations, parentType, fragmentType),
+        narrowedScope,
         fragmentStack,
         options
       ).selections;
@@ -138,7 +172,7 @@ function expandSelection(
       if (
         !fragmentType ||
         !isCompositeType(fragmentType) ||
-        !typeRelations.doesOverlap(parentType, fragmentType)
+        !doesScopeOverlapType(schema, scope, fragmentType)
       ) {
         return [];
       }
@@ -155,6 +189,13 @@ function expandSelection(
         );
       }
 
+      const narrowedScope = narrowTypeScope(
+        schema,
+        typeRelations,
+        scope,
+        fragmentType
+      );
+
       if (!canFlattenTypeCondition(typeRelations, parentType, fragmentType)) {
         if (!options.preserveNarrowingFragments) {
           return [];
@@ -168,11 +209,11 @@ function expandSelection(
             loc: selection.loc,
             typeCondition: fragment.typeCondition,
             directives: selection.directives,
-            selectionSet: expandSelectionSet(
+            selectionSet: expandSelectionSetInScope(
               schema,
               fragments,
               fragment.selectionSet,
-              narrowParentType(typeRelations, parentType, fragmentType),
+              narrowedScope,
               [...fragmentStack, fragmentName],
               options
             ),
@@ -180,11 +221,11 @@ function expandSelection(
         ];
       }
 
-      return expandSelectionSet(
+      return expandSelectionSetInScope(
         schema,
         fragments,
         fragment.selectionSet,
-        narrowParentType(typeRelations, parentType, fragmentType),
+        narrowedScope,
         [...fragmentStack, fragmentName],
         options
       ).selections;
@@ -343,6 +384,81 @@ function getFields(
   }
 
   return undefined;
+}
+
+function createTypeScope(
+  schema: GraphQLSchema,
+  parentType: GraphQLCompositeType
+): TypeScope {
+  return {
+    parentType,
+    possibleTypeNames: getPossibleTypeNames(schema, parentType),
+  };
+}
+
+function narrowTypeScope(
+  schema: GraphQLSchema,
+  typeRelations: TypeRelationContext,
+  scope: TypeScope,
+  conditionType: GraphQLCompositeType
+): TypeScope {
+  // Keep the syntax parent used for field lookups separate from the concrete
+  // type set used to prune impossible inline fragment branches.
+  return {
+    parentType: narrowParentType(
+      typeRelations,
+      scope.parentType,
+      conditionType
+    ),
+    possibleTypeNames: intersectTypeNames(
+      scope.possibleTypeNames,
+      getPossibleTypeNames(schema, conditionType)
+    ),
+  };
+}
+
+function doesScopeOverlapType(
+  schema: GraphQLSchema,
+  scope: TypeScope,
+  conditionType: GraphQLCompositeType
+): boolean {
+  for (const typeName of getPossibleTypeNames(schema, conditionType)) {
+    if (scope.possibleTypeNames.has(typeName)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getPossibleTypeNames(
+  schema: GraphQLSchema,
+  type: GraphQLCompositeType
+): ReadonlySet<string> {
+  if (isObjectType(type)) {
+    return new Set([type.name]);
+  }
+
+  if (isAbstractType(type)) {
+    return new Set(schema.getPossibleTypes(type).map(({ name }) => name));
+  }
+
+  return new Set();
+}
+
+function intersectTypeNames(
+  typeNamesA: ReadonlySet<string>,
+  typeNamesB: ReadonlySet<string>
+): ReadonlySet<string> {
+  const intersection = new Set<string>();
+
+  for (const typeName of typeNamesA) {
+    if (typeNamesB.has(typeName)) {
+      intersection.add(typeName);
+    }
+  }
+
+  return intersection;
 }
 
 function canFlattenTypeCondition(
