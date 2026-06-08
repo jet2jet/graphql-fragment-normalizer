@@ -22,9 +22,6 @@
     "type": "github",
     "url": "https://github.com/sponsors/jet2jet"
   },
-  "engines": {
-    "node": ">=24.16.0"
-  },
   "type": "module",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
