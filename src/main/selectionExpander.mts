@@ -383,7 +383,55 @@ function mergeSelections(
     }
   }
 
-  return mergedSelections;
+  return removeRedundantInlineFragmentFields(mergedSelections);
+}
+
+function removeRedundantInlineFragmentFields(
+  selections: readonly SelectionNode[]
+): readonly SelectionNode[] {
+  const coveringFieldKeys = new Set<string>();
+
+  // A leaf field selected directly in this selection set also applies to each
+  // nested inline fragment branch, so the same leaf field inside the branch is redundant.
+  for (const selection of selections) {
+    if (selection.kind === Kind.FIELD && !selection.selectionSet) {
+      coveringFieldKeys.add(getFieldMergeKey(selection));
+    }
+  }
+
+  if (coveringFieldKeys.size === 0) {
+    return selections;
+  }
+
+  const prunedSelections: SelectionNode[] = [];
+
+  for (const selection of selections) {
+    if (selection.kind !== Kind.INLINE_FRAGMENT) {
+      prunedSelections.push(selection);
+      continue;
+    }
+
+    const nestedSelections = selection.selectionSet.selections.filter(
+      (nestedSelection) =>
+        nestedSelection.kind !== Kind.FIELD ||
+        nestedSelection.selectionSet != null ||
+        !coveringFieldKeys.has(getFieldMergeKey(nestedSelection))
+    );
+
+    if (nestedSelections.length === 0) {
+      continue;
+    }
+
+    prunedSelections.push({
+      ...selection,
+      selectionSet: {
+        ...selection.selectionSet,
+        selections: nestedSelections,
+      },
+    });
+  }
+
+  return prunedSelections;
 }
 
 function getInlineFragmentMergeKey(fragment: InlineFragmentNode): string {
