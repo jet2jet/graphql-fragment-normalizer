@@ -329,6 +329,109 @@ void describe('expandFragments', () => {
     );
   });
 
+  void it('preserves narrowed runtime scope through nested abstract fragments', () => {
+    const schema = buildSchema(`
+      interface Node {
+        id: ID!
+      }
+
+      interface User implements Node {
+        id: ID!
+        name: String!
+      }
+
+      type Owner implements Node & User {
+        id: ID!
+        name: String!
+        fromDate: String!
+      }
+
+      type Admin implements Node & User {
+        id: ID!
+        name: String!
+        adminOnly: String
+      }
+
+      union Maintainer = Owner | Admin
+
+      type Group implements Node {
+        id: ID!
+        groupId: ID!
+        maintainers: [Maintainer!]!
+      }
+
+      type Query {
+        group: Group
+      }
+    `);
+    const document = parse(`
+      query GetGroup {
+        group {
+          maintainers {
+            ...NodeFields
+          }
+        }
+      }
+
+      fragment NodeFields on Node {
+        id
+        ...UserLayer
+      }
+
+      fragment UserLayer on User {
+        id
+        name
+        ...NodeAgain
+      }
+
+      fragment NodeAgain on Node {
+        id
+        ... on Group {
+          id
+          groupId
+        }
+        ... on Owner {
+          id
+          fromDate
+        }
+        ...AdminLayer
+      }
+
+      fragment AdminLayer on Node {
+        ... on Admin {
+          id
+          adminOnly
+        }
+      }
+    `);
+
+    const result = expandFragments(schema, document);
+
+    assertPrintedEqual(
+      result,
+      parse(`
+        query GetGroup {
+          group {
+            maintainers {
+              ... on Node {
+                id
+                ... on User {
+                  name
+                  ... on Owner {
+                    fromDate
+                  }
+                  ... on Admin {
+                    adminOnly
+                  }
+                }
+              }
+            }
+          }
+        }
+      `)
+    );
+  });
+
   void it('can distribute abstract fragments to matching concrete types', () => {
     const schema = buildSchema(`
       interface Node {
