@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.3
+
+- Deduplicate branch fields covered by parent selections
+
 ## v0.2.2
 
 (Fix around CI only; no implementations changed)
