@@ -69,7 +69,7 @@ function expandSelectionSetInScope(
     ...selectionSet,
     // Expanding several fragments often produces the same field more than once.
     // Merge after every selection set expansion so nested object fields are also normalized.
-    selections: mergeSelections(expandedSelections),
+    selections: mergeSelections(schema, expandedSelections),
   };
 }
 
@@ -322,6 +322,7 @@ function distributeAbstractFragment(
 }
 
 function mergeSelections(
+  schema: GraphQLSchema,
   selections: readonly SelectionNode[]
 ): readonly SelectionNode[] {
   const mergedSelections: SelectionNode[] = [];
@@ -347,6 +348,7 @@ function mergeSelections(
         }
 
         mergedSelections[existingIndex] = mergeFields(
+          schema,
           existingSelection,
           selection
         );
@@ -368,6 +370,7 @@ function mergeSelections(
         }
 
         mergedSelections[existingIndex] = mergeInlineFragments(
+          schema,
           existingSelection,
           selection
         );
@@ -383,7 +386,9 @@ function mergeSelections(
     }
   }
 
-  return removeRedundantInlineFragmentFields(mergedSelections);
+  return removeRedundantInlineFragmentFields(
+    hoistNestedInlineFragmentsToSiblings(schema, mergedSelections)
+  );
 }
 
 function removeRedundantInlineFragmentFields(
@@ -434,6 +439,177 @@ function removeRedundantInlineFragmentFields(
   return prunedSelections;
 }
 
+function hoistNestedInlineFragmentsToSiblings(
+  schema: GraphQLSchema,
+  selections: readonly SelectionNode[]
+): readonly SelectionNode[] {
+  const siblingFragmentIndexes = new Map<string, number>();
+
+  for (const [index, selection] of selections.entries()) {
+    if (!isConcreteInlineFragment(schema, selection)) {
+      continue;
+    }
+
+    siblingFragmentIndexes.set(getInlineFragmentMergeKey(selection), index);
+  }
+
+  if (siblingFragmentIndexes.size === 0) {
+    return selections;
+  }
+
+  const hoistedFragments: InlineFragmentNode[] = [];
+  const nextSelections = selections.flatMap((selection, index) => {
+    if (selection.kind !== Kind.INLINE_FRAGMENT || hasDirectives(selection)) {
+      return [selection];
+    }
+
+    const result = removeHoistableNestedInlineFragments(
+      schema,
+      selection.selectionSet.selections,
+      siblingFragmentIndexes,
+      index,
+      hoistedFragments
+    );
+
+    if (!result.changed) {
+      return [selection];
+    }
+
+    if (result.selections.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        ...selection,
+        selectionSet: {
+          ...selection.selectionSet,
+          selections: result.selections,
+        },
+      },
+    ];
+  });
+
+  if (hoistedFragments.length === 0) {
+    return selections;
+  }
+
+  return mergeHoistedInlineFragments(schema, nextSelections, hoistedFragments);
+}
+
+function removeHoistableNestedInlineFragments(
+  schema: GraphQLSchema,
+  selections: readonly SelectionNode[],
+  siblingFragmentIndexes: ReadonlyMap<string, number>,
+  sourceSiblingIndex: number,
+  hoistedFragments: InlineFragmentNode[]
+): { readonly changed: boolean; readonly selections: readonly SelectionNode[] } {
+  let changed = false;
+  const nextSelections: SelectionNode[] = [];
+
+  for (const selection of selections) {
+    if (selection.kind !== Kind.INLINE_FRAGMENT) {
+      nextSelections.push(selection);
+      continue;
+    }
+
+    const key = getInlineFragmentMergeKey(selection);
+    const targetSiblingIndex = siblingFragmentIndexes.get(key);
+    if (
+      isConcreteInlineFragment(schema, selection) &&
+      targetSiblingIndex != null &&
+      targetSiblingIndex !== sourceSiblingIndex
+    ) {
+      hoistedFragments.push(selection);
+      changed = true;
+      continue;
+    }
+
+    if (hasDirectives(selection)) {
+      nextSelections.push(selection);
+      continue;
+    }
+
+    const result = removeHoistableNestedInlineFragments(
+      schema,
+      selection.selectionSet.selections,
+      siblingFragmentIndexes,
+      sourceSiblingIndex,
+      hoistedFragments
+    );
+
+    if (!result.changed) {
+      nextSelections.push(selection);
+      continue;
+    }
+
+    changed = true;
+    if (result.selections.length === 0) {
+      continue;
+    }
+
+    nextSelections.push({
+      ...selection,
+      selectionSet: {
+        ...selection.selectionSet,
+        selections: result.selections,
+      },
+    });
+  }
+
+  return { changed, selections: nextSelections };
+}
+
+function mergeHoistedInlineFragments(
+  schema: GraphQLSchema,
+  selections: readonly SelectionNode[],
+  hoistedFragments: readonly InlineFragmentNode[]
+): readonly SelectionNode[] {
+  const mergedSelections = [...selections];
+  const siblingFragmentIndexes = new Map<string, number>();
+
+  for (const [index, selection] of mergedSelections.entries()) {
+    if (selection.kind === Kind.INLINE_FRAGMENT) {
+      siblingFragmentIndexes.set(getInlineFragmentMergeKey(selection), index);
+    }
+  }
+
+  for (const fragment of hoistedFragments) {
+    const index = siblingFragmentIndexes.get(getInlineFragmentMergeKey(fragment));
+    if (index == null) {
+      continue;
+    }
+
+    const existingSelection = mergedSelections[index];
+    if (existingSelection?.kind !== Kind.INLINE_FRAGMENT) {
+      continue;
+    }
+
+    mergedSelections[index] = mergeInlineFragments(
+      schema,
+      existingSelection,
+      fragment
+    );
+  }
+
+  return mergedSelections;
+}
+
+function isConcreteInlineFragment(
+  schema: GraphQLSchema,
+  selection: SelectionNode
+): selection is InlineFragmentNode {
+  if (selection.kind !== Kind.INLINE_FRAGMENT || !selection.typeCondition) {
+    return false;
+  }
+
+  return isObjectType(schema.getType(selection.typeCondition.name.value));
+}
+
+function hasDirectives(selection: InlineFragmentNode): boolean {
+  return (selection.directives?.length ?? 0) > 0;
+}
+
 function getInlineFragmentMergeKey(fragment: InlineFragmentNode): string {
   return [
     fragment.typeCondition?.name.value ?? '',
@@ -442,6 +618,7 @@ function getInlineFragmentMergeKey(fragment: InlineFragmentNode): string {
 }
 
 function mergeInlineFragments(
+  schema: GraphQLSchema,
   existingFragment: InlineFragmentNode,
   nextFragment: InlineFragmentNode
 ): InlineFragmentNode {
@@ -449,7 +626,7 @@ function mergeInlineFragments(
     ...existingFragment,
     selectionSet: {
       ...existingFragment.selectionSet,
-      selections: mergeSelections([
+      selections: mergeSelections(schema, [
         ...existingFragment.selectionSet.selections,
         ...nextFragment.selectionSet.selections,
       ]),
@@ -469,6 +646,7 @@ function getFieldMergeKey(field: FieldNode): string {
 }
 
 function mergeFields(
+  schema: GraphQLSchema,
   existingField: FieldNode,
   nextField: FieldNode
 ): FieldNode {
@@ -480,7 +658,7 @@ function mergeFields(
     ...existingField,
     selectionSet: {
       ...existingField.selectionSet,
-      selections: mergeSelections([
+      selections: mergeSelections(schema, [
         ...existingField.selectionSet.selections,
         ...nextField.selectionSet.selections,
       ]),

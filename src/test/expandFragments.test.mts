@@ -432,6 +432,186 @@ void describe('expandFragments', () => {
     );
   });
 
+  void it('merges nested concrete branches into matching sibling fragments', () => {
+    const schema = buildSchema(`
+      interface Node {
+        id: ID!
+      }
+
+      interface User implements Node {
+        id: ID!
+        name: String!
+      }
+
+      type Owner implements Node & User {
+        id: ID!
+        name: String!
+        fromDate: String!
+        ownerOnly: String
+      }
+
+      type Admin implements Node & User {
+        id: ID!
+        name: String!
+        adminOnly: String
+      }
+
+      union Maintainer = Owner | Admin
+
+      type Group implements Node {
+        id: ID!
+        groupId: ID!
+        maintainers: [Maintainer!]!
+      }
+
+      type Query {
+        group: Group
+      }
+    `);
+    const document = parse(`
+      query GetGroup {
+        group {
+          maintainers {
+            ... on Owner {
+              ownerOnly
+            }
+            ... on Admin {
+              adminOnly
+            }
+            ...NodeFields
+          }
+        }
+      }
+
+      fragment NodeFields on Node {
+        id
+        ...UserLayer
+      }
+
+      fragment UserLayer on User {
+        id
+        name
+        ...NodeAgain
+      }
+
+      fragment NodeAgain on Node {
+        id
+        ... on Group {
+          id
+          groupId
+        }
+        ... on Owner {
+          id
+          fromDate
+        }
+        ...AdminLayer
+      }
+
+      fragment AdminLayer on Node {
+        ... on Admin {
+          id
+          adminOnly
+        }
+      }
+    `);
+
+    const result = expandFragments(schema, document);
+
+    assertPrintedEqual(
+      result,
+      parse(`
+        query GetGroup {
+          group {
+            maintainers {
+              ... on Owner {
+                ownerOnly
+                fromDate
+              }
+              ... on Admin {
+                adminOnly
+              }
+              ... on Node {
+                id
+                ... on User {
+                  name
+                }
+              }
+            }
+          }
+        }
+      `)
+    );
+  });
+
+  void it('normalizes nested concrete branches within the same sibling fragment', () => {
+    const schema = buildSchema(`
+      interface Node {
+        id: ID!
+      }
+
+      interface User implements Node {
+        id: ID!
+        name: String!
+      }
+
+      type Owner implements Node & User {
+        id: ID!
+        name: String!
+        ownerOnly: String
+        fromDate: String!
+      }
+
+      type Admin implements Node & User {
+        id: ID!
+        name: String!
+        adminOnly: String
+      }
+
+      union Maintainer = Owner | Admin
+
+      type Query {
+        maintainers: [Maintainer!]!
+      }
+    `);
+    const document = parse(`
+      query GetMaintainers {
+        maintainers {
+          ... on Owner {
+            ownerOnly
+            ...OwnerDetails
+          }
+        }
+      }
+
+      fragment OwnerDetails on User {
+        name
+        ... on Owner {
+          fromDate
+        }
+        ... on Admin {
+          adminOnly
+        }
+      }
+    `);
+
+    const result = expandFragments(schema, document);
+
+    assertPrintedEqual(
+      result,
+      parse(`
+        query GetMaintainers {
+          maintainers {
+            ... on Owner {
+              ownerOnly
+              name
+              fromDate
+            }
+          }
+        }
+      `)
+    );
+  });
+
   void it('can distribute abstract fragments to matching concrete types', () => {
     const schema = buildSchema(`
       interface Node {
