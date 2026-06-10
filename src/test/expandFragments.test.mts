@@ -612,6 +612,84 @@ void describe('expandFragments', () => {
     );
   });
 
+  void it('does not hoist nested concrete branches through directives', () => {
+    const schema = buildSchema(`
+      interface Node {
+        id: ID!
+      }
+
+      interface User implements Node {
+        id: ID!
+        name: String!
+      }
+
+      type Owner implements Node & User {
+        id: ID!
+        name: String!
+        ownerOnly: String
+        fromDate: String!
+      }
+
+      type Admin implements Node & User {
+        id: ID!
+        name: String!
+        adminOnly: String
+      }
+
+      union Maintainer = Owner | Admin
+
+      type Query {
+        maintainers: [Maintainer!]!
+      }
+    `);
+    const document = parse(`
+      query GetMaintainers($includeDetails: Boolean!) {
+        maintainers {
+          ... on Owner {
+            ownerOnly
+          }
+          ... on Node @include(if: $includeDetails) {
+            ... on User {
+              name
+              ... on Owner {
+                fromDate
+              }
+              ... on Admin {
+                adminOnly
+              }
+            }
+          }
+        }
+      }
+    `);
+
+    const result = expandFragments(schema, document);
+
+    assertPrintedEqual(
+      result,
+      parse(`
+        query GetMaintainers($includeDetails: Boolean!) {
+          maintainers {
+            ... on Owner {
+              ownerOnly
+            }
+            ... on Node @include(if: $includeDetails) {
+              ... on User {
+                name
+                ... on Owner {
+                  fromDate
+                }
+                ... on Admin {
+                  adminOnly
+                }
+              }
+            }
+          }
+        }
+      `)
+    );
+  });
+
   void it('can distribute abstract fragments to matching concrete types', () => {
     const schema = buildSchema(`
       interface Node {
