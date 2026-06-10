@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.4
+
+- Normalize nested concrete fragment branches
+
 ## v0.2.3
 
 - Deduplicate branch fields covered by parent selections
