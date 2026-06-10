@@ -28,6 +28,8 @@ interface TypeScope {
   readonly possibleTypeNames: ReadonlySet<string>;
 }
 
+// Start expansion with a scope that records both the syntax parent type and
+// the concrete runtime types that can still be reached from that parent.
 export function expandSelectionSet(
   schema: GraphQLSchema,
   fragments: ReadonlyMap<string, FragmentDefinitionNode>,
@@ -73,6 +75,7 @@ function expandSelectionSetInScope(
   };
 }
 
+// Expand one AST selection while preserving the current runtime type scope.
 function expandSelection(
   schema: GraphQLSchema,
   fragments: ReadonlyMap<string, FragmentDefinitionNode>,
@@ -268,6 +271,8 @@ function throwUnexpectedSelection(selection: never): never {
   throw new Error(`Unexpected selection kind: ${JSON.stringify(selection)}`);
 }
 
+// Optional normalization: replace an abstract narrowing fragment with one
+// inline fragment per reachable concrete object type.
 function distributeAbstractFragment(
   schema: GraphQLSchema,
   fragments: ReadonlyMap<string, FragmentDefinitionNode>,
@@ -321,6 +326,8 @@ function distributeAbstractFragment(
   return selections;
 }
 
+// Merge duplicate fields/fragments first, then apply cross-branch cleanups
+// that rely on the merged sibling shape.
 function mergeSelections(
   schema: GraphQLSchema,
   selections: readonly SelectionNode[]
@@ -439,6 +446,8 @@ function removeRedundantInlineFragmentFields(
   return prunedSelections;
 }
 
+// Move directive-free concrete fragments into matching sibling fragments when
+// doing so preserves the same runtime conditions.
 function hoistNestedInlineFragmentsToSiblings(
   schema: GraphQLSchema,
   selections: readonly SelectionNode[]
@@ -497,6 +506,8 @@ function hoistNestedInlineFragmentsToSiblings(
   return mergeHoistedInlineFragments(schema, nextSelections, hoistedFragments);
 }
 
+// Walk a branch looking for concrete fragments that can be merged into a
+// different sibling fragment at the original selection-set level.
 function removeHoistableNestedInlineFragments(
   schema: GraphQLSchema,
   selections: readonly SelectionNode[],
@@ -560,6 +571,7 @@ function removeHoistableNestedInlineFragments(
   return { changed, selections: nextSelections };
 }
 
+// Fold fragments collected from nested branches into their matching siblings.
 function mergeHoistedInlineFragments(
   schema: GraphQLSchema,
   selections: readonly SelectionNode[],
@@ -595,6 +607,8 @@ function mergeHoistedInlineFragments(
   return mergedSelections;
 }
 
+// Only object-type fragments are safe hoist targets; abstract fragments may
+// still include runtime branches that should remain nested.
 function isConcreteInlineFragment(
   schema: GraphQLSchema,
   selection: SelectionNode
@@ -724,6 +738,8 @@ function narrowTypeScope(
   };
 }
 
+// Scope overlap is based on reachable concrete types, not just GraphQL.js'
+// parent/condition overlap, so union constraints survive interface narrowing.
 function doesScopeOverlapType(
   schema: GraphQLSchema,
   scope: TypeScope,
@@ -738,6 +754,7 @@ function doesScopeOverlapType(
   return false;
 }
 
+// Normalize every composite type into its possible concrete object names.
 function getPossibleTypeNames(
   schema: GraphQLSchema,
   type: GraphQLCompositeType
@@ -784,6 +801,8 @@ function getReachableObjectTypes(
   return objectTypes;
 }
 
+// Flatten only when every selection remains valid directly under the current
+// parent type; otherwise keep an inline fragment around the narrowed fields.
 function canFlattenTypeCondition(
   typeRelations: TypeRelationContext,
   parentType: GraphQLCompositeType,
@@ -808,6 +827,8 @@ function canFlattenTypeCondition(
   );
 }
 
+// Choose the parent type to use for field lookups while expanding inside the
+// fragment condition.
 function narrowParentType(
   typeRelations: TypeRelationContext,
   parentType: GraphQLCompositeType,
