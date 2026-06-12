@@ -12,3 +12,4 @@ obj/
 *.user
 npm-debug.log
 yarn-error.log
+AGENTS.md
