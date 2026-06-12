@@ -127,6 +127,7 @@ export interface ExpandFragmentsOptions {
   readonly distributeAbstractFragments?: boolean;
   readonly preserveNamedFragmentsUsedAtLeast?: number;
   readonly fragmentDefinitionsMode?: 'drop' | 'normalize' | 'preserve';
+  readonly missingFragmentBehavior?: 'error' | 'warn' | 'ignore';
   readonly typeRelationContext?: TypeRelationContext;
 }
 ```
@@ -137,6 +138,7 @@ export interface ExpandFragmentsOptions {
 - `distributeAbstractFragments`: Emits abstract narrowing fragments as inline fragments for each reachable concrete object type. Defaults to `false`.
 - `preserveNamedFragmentsUsedAtLeast`: Keeps named fragment spreads when a fragment is used at least this many times. Values less than or equal to `0` disable this behavior.
 - `fragmentDefinitionsMode`: Controls input `FragmentDefinition` nodes in the returned document. `drop` removes them after expansion, `preserve` keeps them unchanged, and `normalize` keeps and normalizes them. Defaults to `drop`.
+- `missingFragmentBehavior`: Controls unresolved named fragment spreads. `error` throws, `warn` logs a warning and omits the spread, and `ignore` omits it silently. Defaults to `error`.
 - `typeRelationContext`: Reusable type-relation cache created with `createTypeRelationContext(schema)`.
 
 The Code Generator plugin accepts the same options except `additionalFragments`, `fragmentDefinitionsMode`, and `typeRelationContext`, which are managed internally. (The plugin always sets `fragmentDefinitionsMode` to `preserve` to keep fragment definitions for following generating processes.)

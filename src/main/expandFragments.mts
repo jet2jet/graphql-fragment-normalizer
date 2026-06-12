@@ -26,6 +26,7 @@ import { expandSelectionSet } from './selectionExpander.mts';
 export type {
   ExpandFragmentsOptions,
   FragmentDefinitionsMode,
+  MissingFragmentBehavior,
 } from './expandFragmentsTypes.mts';
 
 /**
@@ -184,6 +185,7 @@ function resolveOptions(
     additionalFragments,
     distributeAbstractFragments: options.distributeAbstractFragments ?? false,
     fragmentDefinitionsMode,
+    missingFragmentBehavior: options.missingFragmentBehavior ?? 'error',
     operationName,
     preserveNamedFragmentsUsedAtLeast,
     preserveNarrowingFragments: options.preserveNarrowingFragments ?? true,
@@ -215,6 +217,7 @@ function resolveFragmentOptions(
     additionalFragments,
     distributeAbstractFragments: options.distributeAbstractFragments ?? false,
     fragmentDefinitionsMode: options.fragmentDefinitionsMode ?? 'drop',
+    missingFragmentBehavior: options.missingFragmentBehavior ?? 'error',
     operationName: options.operationName ?? null,
     preserveNamedFragmentsUsedAtLeast,
     preserveNarrowingFragments: options.preserveNarrowingFragments ?? true,

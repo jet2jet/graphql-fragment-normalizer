@@ -1286,6 +1286,107 @@ void describe('expandFragments', () => {
     );
   });
 
+  void it('throws when a named fragment spread references a missing fragment by default', () => {
+    const schema = buildSchema(`
+      type Query {
+        user: User
+      }
+
+      type User {
+        id: ID!
+      }
+    `);
+    const document = parse(`
+      query GetUser {
+        user {
+          ...MissingUserFields
+        }
+      }
+    `);
+
+    assert.throws(
+      () => expandFragments(schema, document),
+      /Missing fragment definition: MissingUserFields/
+    );
+  });
+
+  void it('can ignore missing named fragment spreads', () => {
+    const schema = buildSchema(`
+      type Query {
+        user: User
+      }
+
+      type User {
+        id: ID!
+      }
+    `);
+    const document = parse(`
+      query GetUser {
+        user {
+          ...MissingUserFields
+        }
+      }
+    `);
+
+    const result = expandFragments(schema, document, {
+      missingFragmentBehavior: 'ignore',
+    });
+
+    assertPrintedEqual(
+      result,
+      parse(`
+        query GetUser {
+          user
+        }
+      `)
+    );
+  });
+
+  void it('can warn about missing named fragment spreads', () => {
+    const schema = buildSchema(`
+      type Query {
+        user: User
+      }
+
+      type User {
+        id: ID!
+      }
+    `);
+    const document = parse(`
+      query GetUser {
+        user {
+          ...MissingUserFields
+        }
+      }
+    `);
+    const warnings: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args);
+    };
+
+    try {
+      const result = expandFragments(schema, document, {
+        missingFragmentBehavior: 'warn',
+      });
+
+      assertPrintedEqual(
+        result,
+        parse(`
+          query GetUser {
+            user
+          }
+        `)
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    assert.deepEqual(warnings, [
+      ['Missing fragment definition: MissingUserFields'],
+    ]);
+  });
+
   void it('merges fields read by multiple fragments without duplicating selections', () => {
     const schema = buildSchema(`
       type Query {

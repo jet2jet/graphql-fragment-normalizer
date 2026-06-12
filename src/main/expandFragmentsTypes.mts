@@ -2,6 +2,7 @@ import type { FragmentDefinitionNode } from 'graphql';
 import type { TypeRelationContext } from './createTypeRelationContext.mts';
 
 export type FragmentDefinitionsMode = 'drop' | 'normalize' | 'preserve';
+export type MissingFragmentBehavior = 'error' | 'warn' | 'ignore';
 
 /**
  * Controls how fragments are expanded from a GraphQL document.
@@ -51,6 +52,15 @@ export interface ExpandFragmentsOptions {
    */
   readonly fragmentDefinitionsMode?: FragmentDefinitionsMode;
   /**
+   * Controls what happens when a named fragment spread references a fragment definition
+   * that is not present in the input document or additional fragments.
+   *
+   * - `error` (default): throws an error.
+   * - `warn`: emits a warning and omits the unresolved spread.
+   * - `ignore`: omits the unresolved spread without reporting it.
+   */
+  readonly missingFragmentBehavior?: MissingFragmentBehavior;
+  /**
    * Used for calculating type relations (parent/child or etc.).
    * You can create by using {@linkcode createTypeRelationContext} and re-use it whenever the schema is unchanged.
    */
@@ -60,6 +70,7 @@ export interface ExpandFragmentsOptions {
 export interface ResolvedExpandFragmentsOptions {
   readonly additionalFragments: readonly FragmentDefinitionNode[];
   readonly fragmentDefinitionsMode: FragmentDefinitionsMode;
+  readonly missingFragmentBehavior: MissingFragmentBehavior;
   readonly operationName: string | null;
   readonly distributeAbstractFragments: boolean;
   readonly preserveNamedFragmentsUsedAtLeast: number;

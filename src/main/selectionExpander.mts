@@ -182,6 +182,7 @@ function expandSelection(
       const fragmentName = selection.name.value;
       const fragment = fragments.get(fragmentName);
       if (!fragment) {
+        handleMissingFragment(fragmentName, fragmentStack, options);
         return [];
       }
 
@@ -269,6 +270,24 @@ function expandSelection(
 
 function throwUnexpectedSelection(selection: never): never {
   throw new Error(`Unexpected selection kind: ${JSON.stringify(selection)}`);
+}
+
+function handleMissingFragment(
+  fragmentName: string,
+  fragmentStack: readonly string[],
+  options: ResolvedExpandFragmentsOptions
+): void {
+  if (options.missingFragmentBehavior === 'ignore') {
+    return;
+  }
+
+  const message = `Missing fragment definition: ${[...fragmentStack, fragmentName].join(' -> ')}`;
+  if (options.missingFragmentBehavior === 'warn') {
+    console.warn(message);
+    return;
+  }
+
+  throw new Error(message);
 }
 
 // Optional normalization: replace an abstract narrowing fragment with one
