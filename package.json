@@ -49,7 +49,7 @@
     "lint:prettier": "prettier --config ./.prettierrc.yml --check \"**/*.{js,jsx,ts,tsx,yml,json,md,graphql}\"",
     "lint:prettier:fix": "prettier --config ./.prettierrc.yml --write \"**/*.{js,jsx,ts,tsx,yml,json,md,graphql}\"",
     "test": "node --test \"src/test/**/*.test.mts\"",
-    "typecheck": "tsc --project tsconfig.json --noEmit && echo \"Done.\"",
+    "typecheck": "tsc --project tsconfig.app.json --noEmit && tsc --project tsconfig.json --noEmit && echo \"Done.\"",
     "version": "node ./tools/updateVersion.mjs ./src/main/version.mts && git add -A ./src/main/version.mts"
   },
   "peerDependencies": {

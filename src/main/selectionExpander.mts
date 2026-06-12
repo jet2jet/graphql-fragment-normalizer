@@ -19,6 +19,10 @@ import {
 import type { TypeRelationContext } from './createTypeRelationContext.mts';
 import type { ResolvedExpandFragmentsOptions } from './expandFragmentsTypes.mts';
 
+// Declare only the console shape used here so the app build can keep types: []
+// without pulling in Node or DOM globals.
+declare const console: { warn: (message: string) => void } | undefined;
+
 type GraphQLFields = ReturnType<GraphQLObjectType['getFields']>;
 
 interface TypeScope {
@@ -57,14 +61,7 @@ function expandSelectionSetInScope(
   options: ResolvedExpandFragmentsOptions
 ): SelectionSetNode {
   const expandedSelections = selectionSet.selections.flatMap((selection) =>
-    expandSelection(
-      schema,
-      fragments,
-      selection,
-      scope,
-      fragmentStack,
-      options
-    )
+    expandSelection(schema, fragments, selection, scope, fragmentStack, options)
   );
 
   return {
@@ -133,7 +130,10 @@ function expandSelection(
       );
 
       if (!canFlattenTypeCondition(typeRelations, parentType, fragmentType)) {
-        if (options.distributeAbstractFragments && isAbstractType(fragmentType)) {
+        if (
+          options.distributeAbstractFragments &&
+          isAbstractType(fragmentType)
+        ) {
           return distributeAbstractFragment(
             schema,
             fragments,
@@ -215,7 +215,10 @@ function expandSelection(
       );
 
       if (!canFlattenTypeCondition(typeRelations, parentType, fragmentType)) {
-        if (options.distributeAbstractFragments && isAbstractType(fragmentType)) {
+        if (
+          options.distributeAbstractFragments &&
+          isAbstractType(fragmentType)
+        ) {
           return distributeAbstractFragment(
             schema,
             fragments,
@@ -283,7 +286,9 @@ function handleMissingFragment(
 
   const message = `Missing fragment definition: ${[...fragmentStack, fragmentName].join(' -> ')}`;
   if (options.missingFragmentBehavior === 'warn') {
-    console.warn(message);
+    if (typeof console !== 'undefined') {
+      console.warn(message);
+    }
     return;
   }
 
@@ -533,7 +538,10 @@ function removeHoistableNestedInlineFragments(
   siblingFragmentIndexes: ReadonlyMap<string, number>,
   sourceSiblingIndex: number,
   hoistedFragments: InlineFragmentNode[]
-): { readonly changed: boolean; readonly selections: readonly SelectionNode[] } {
+): {
+  readonly changed: boolean;
+  readonly selections: readonly SelectionNode[];
+} {
   let changed = false;
   const nextSelections: SelectionNode[] = [];
 
@@ -606,7 +614,9 @@ function mergeHoistedInlineFragments(
   }
 
   for (const fragment of hoistedFragments) {
-    const index = siblingFragmentIndexes.get(getInlineFragmentMergeKey(fragment));
+    const index = siblingFragmentIndexes.get(
+      getInlineFragmentMergeKey(fragment)
+    );
     if (index == null) {
       continue;
     }
