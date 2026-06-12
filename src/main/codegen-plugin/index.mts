@@ -10,13 +10,26 @@ import expandFragments, {
 export type Config = Omit<
   ExpandFragmentsOptions,
   'additionalFragments' | 'fragmentDefinitionsMode' | 'typeRelationContext'
->;
+> & {
+  readonly externalFragments?: readonly ExternalFragment[];
+};
+
+interface ExternalFragment {
+  readonly name?: string;
+  readonly onType?: string;
+  readonly node: FragmentDefinitionNode;
+  readonly isExternal?: boolean;
+  readonly importFrom?: string | null;
+}
 
 const typeRelationContexts = new WeakMap<GraphQLSchema, TypeRelationContext>();
 
 export const plugin: PluginFunction<Config> = (schema, documents, config) => {
   const typeRelationContext = getTypeRelationContext(schema);
-  const additionalFragments = collectFragmentDefinitions(documents);
+  const additionalFragments = collectAdditionalFragmentDefinitions(
+    documents,
+    config.externalFragments
+  );
   documents.forEach((documentFile) => {
     if (!documentFile.document) {
       return;
@@ -38,6 +51,16 @@ export const plugin: PluginFunction<Config> = (schema, documents, config) => {
     content: '',
   };
 };
+
+function collectAdditionalFragmentDefinitions(
+  documents: readonly Types.DocumentFile[],
+  externalFragments: readonly ExternalFragment[] | undefined
+): FragmentDefinitionNode[] {
+  return [
+    ...(externalFragments?.map((fragment) => fragment.node) ?? []),
+    ...collectFragmentDefinitions(documents),
+  ];
+}
 
 function getTypeRelationContext(schema: GraphQLSchema): TypeRelationContext {
   const cachedContext = typeRelationContexts.get(schema);

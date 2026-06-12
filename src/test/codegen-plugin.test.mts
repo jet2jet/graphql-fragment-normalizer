@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { buildSchema, parse, print, type DocumentNode } from 'graphql';
@@ -61,6 +61,64 @@ void describe('codegen-plugin', () => {
         fragment UserFields on User {
           id
           name
+        }
+      `)
+    );
+  });
+
+  void it('expands fragments supplied through externalFragments config', async () => {
+    const schema = buildSchema(`
+      type Query {
+        user: User
+      }
+
+      type User {
+        id: ID!
+        name: String!
+      }
+    `);
+    const operationDocument = parse(`
+      query GetUser {
+        user {
+          ...UserFields
+        }
+      }
+    `);
+    const fragmentDocument = parse(`
+      fragment UserFields on User {
+        id
+        name
+      }
+    `);
+    const fragmentDefinition = fragmentDocument.definitions[0];
+    assert.equal(fragmentDefinition?.kind, 'FragmentDefinition');
+    const documents = [
+      {
+        location: 'operation.graphql',
+        document: operationDocument,
+      },
+    ];
+
+    await plugin(schema, documents, {
+      externalFragments: [
+        {
+          name: 'UserFields',
+          onType: 'User',
+          node: fragmentDefinition,
+          isExternal: true,
+          importFrom: './userFields.graphql',
+        },
+      ],
+    });
+
+    assertPrintedEqual(
+      documents[0]!.document,
+      parse(`
+        query GetUser {
+          user {
+            id
+            name
+          }
         }
       `)
     );
@@ -139,6 +197,32 @@ void describe('codegen-plugin', () => {
       `)
     );
   });
+
+  void it('expands external fragments with near-operation-file preset', () => {
+    prepareNearOperationFileFixture();
+    runGraphqlCodegen('src/test/codegen-plugin/near-operation-file-codegen.mts');
+
+    const generatedSource = readFileSync(
+      join(
+        process.cwd(),
+        '.work/codegen-plugin-near-src/operation.expanded.graphql'
+      ),
+      'utf8'
+    );
+
+    assert.doesNotMatch(generatedSource, /\.\.\.UserFields/);
+    assertPrintedEqual(
+      parse(generatedSource),
+      parse(`
+        query GetUser {
+          user {
+            id
+            name
+          }
+        }
+      `)
+    );
+  });
 });
 
 function assertPrintedEqual(
@@ -148,11 +232,37 @@ function assertPrintedEqual(
   assert.equal(print(actual), print(expected));
 }
 
-function runGraphqlCodegen(): void {
+function prepareNearOperationFileFixture(): void {
+  const fixtureDirectory = join(process.cwd(), '.work/codegen-plugin-near-src');
+  mkdirSync(fixtureDirectory, { recursive: true });
+  writeFileSync(
+    join(fixtureDirectory, 'operation.graphql'),
+    `
+      query GetUser {
+        user {
+          ...UserFields
+        }
+      }
+    `
+  );
+  writeFileSync(
+    join(fixtureDirectory, 'userFields.graphql'),
+    `
+      fragment UserFields on User {
+        id
+        name
+      }
+    `
+  );
+}
+
+function runGraphqlCodegen(
+  configPath = 'src/test/codegen-plugin/codegen.mts'
+): void {
   const nodeBinDirectory = dirname(process.execPath);
   execFileSync(
     join(nodeBinDirectory, process.platform === 'win32' ? 'npx.cmd' : 'npx'),
-    ['graphql-codegen', '--config', 'src/test/codegen-plugin/codegen.mts'],
+    ['graphql-codegen', '--config', configPath],
     {
       cwd: process.cwd(),
       env: {
