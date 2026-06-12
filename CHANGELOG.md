@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.6
+
+(Fix around build error only; no implementations changed)
+
 ## v0.2.5
 
 - (**Possibly breaking change** but is actual a bugfix) Fix to throw (by default) on unresolved named fragment spreads instead of silently dropping them
