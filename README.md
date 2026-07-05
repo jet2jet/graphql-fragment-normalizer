@@ -8,6 +8,8 @@ Normalizes GraphQL documents by expanding fragment spreads and inline fragments 
 
 This package can be used directly with GraphQL ASTs, or as a GraphQL Code Generator plugin that rewrites documents before later plugins generate their output.
 
+You can try the library here: [graphql-fragment-normalizer REPL](https://www.pg-fl.jp/program/gql-normalizer/index.en.htm)
+
 - [Motivation](#motivation)
 - [Usage](#usage)
   - [Installing](#installing)
