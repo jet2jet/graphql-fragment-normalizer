@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.0
+
+Update dependencies; now supports graphql@17
+
 ## v0.2.6
 
 (Fix around build error only; no implementations changed)
